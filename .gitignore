@@ -3,3 +3,4 @@ out/
 .clangd
 toolchain-configs
 CMakePresets.json
+.vscode/
