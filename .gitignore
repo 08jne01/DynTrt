@@ -1,0 +1,5 @@
+out/
+.clang-tidy
+.clangd
+toolchain-configs
+CMakePresets.json
