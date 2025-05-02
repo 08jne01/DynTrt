@@ -6,6 +6,8 @@ DynTrts is a very small header only library (very WIP) initialy designed to emul
 
 If you wish to use cmake add the subdirectory and then add the `DynTrt` as a link library to your target.
 
+Otherwise you can simply take src/include/DynTrt.h and put it in your project.
+
 ## Examples
 
 ### Simple Example
