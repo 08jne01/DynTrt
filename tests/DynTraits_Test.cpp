@@ -29,8 +29,12 @@ struct Rectangle
     int draw_count = 0;
 };
 
-struct Shape : DynTrt::Traits // define shape trait
+struct Shape
 {
+    // Default template to specialise with the respective Methods and Types.
+    template<typename Method, typename T, typename... Ts>
+    static inline Method::return_type Invoke( T*, Ts... );
+
     // Default these
     struct Draw      : DynTrt::Method<Draw,     Colour(DynTrt::ConstSelf)> {
         template<typename T>
@@ -59,31 +63,34 @@ struct Shape : DynTrt::Traits // define shape trait
 };
 
 template<>
-void DynTrt::Traits::Invoke<Shape::Rotate>( Rectangle* self, double rotation ) 
+void Shape::Invoke<Shape::Rotate>( Rectangle* self, double rotation ) 
 {
     self->rotation = rotation;
 }
 
 // Note below the different implementations
 template<>
-void DynTrt::Traits::Invoke<Shape::Scale>( Circle* self, double scale )
+void Shape::Invoke<Shape::Scale>( Circle* self, double scale )
 {
     self->r *= scale;
 }
 
+// Template Specialisation of Shape::Move for Circle.
 template<>
 void Shape::Move::Invoke(Circle* self, double x, double y)
 {
-    self->x = 2.0 * x;
+    self->x = x;
     self->y = y;
 }
 
 template<>
-void DynTrt::Traits::Invoke<Shape::Scale>( Rectangle* self, double scale )
+void Shape::Invoke<Shape::Scale>( Rectangle* self, double scale )
 {
     self->width  *= scale;
     self->height *= scale;
 }
+
+
 
 TEST_CASE("DynTrait Basic", "[Basic]")
 {

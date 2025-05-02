@@ -367,6 +367,8 @@ namespace DynTrt
         }
     };
 
+    // You can inherit from this instead of using the below declaration however
+    // it will limit your definitions to only the global namespace so it's not advised.
     struct Traits
     {
         // Default template to specialise with the respective Methods and Types.
