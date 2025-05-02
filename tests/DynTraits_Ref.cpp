@@ -7,7 +7,9 @@
 #include <variant>
 
 #include "DynTrt.h"
-
+namespace tst
+{
+    
 struct Circle
 {
     void PrintMove(double x, double y) { printf("Circle Move, (%lf,%lf)\n", x, y); }
@@ -58,6 +60,8 @@ struct Triangle
     void PrintRotate(double x) { printf("Triangle Rotate: %lf\n", x); }
 };
 
+}
+
 #define ANY_INVOKE_DEFINITION() \
     template<typename Method, typename T, typename... Ts> \
     static inline Method::return_type Invoke( T*, Ts... )
@@ -68,14 +72,17 @@ struct Shape
     ANY_INVOKE_DEFINITION();
 
     // Render
-    struct Draw :   DynTrt::Method<Shape, void(DynTrt::ConstSelf)> {};
+    struct Draw :   DynTrt::Method<Draw, void(DynTrt::ConstSelf)> {
+        template<typename T>
+        static void Invoke(const T* self) { self->PrintDraw(); }
+    };
     // Transform
-    struct Move :   DynTrt::Method<Shape, void(DynTrt::Self, double x, double y)> {};
-    struct Scale :  DynTrt::Method<Shape, void(DynTrt::Self)> {};
+    struct Move :   DynTrt::Method<void, void(DynTrt::Self, double x, double y)> {};
+    struct Scale :  DynTrt::Method<void, void(DynTrt::Self)> {};
     // Modfiy
-    struct Slice :  DynTrt::Method<Shape, void(DynTrt::Self)> {};
+    struct Slice :  DynTrt::Method<void, void(DynTrt::Self)> {};
     // Rotatable
-    struct Rotate : DynTrt::Method<Shape, void(DynTrt::Self, double)> {};
+    struct Rotate : DynTrt::Method<void, void(DynTrt::Self, double)> {};
 
     
 
@@ -120,14 +127,14 @@ struct Shape
 // };
 
 template<>
-void Shape::Invoke<Shape::Draw>( const Circle* circle )
+void Shape::Invoke<Shape::Draw>( const tst::Circle* circle )
 {
     //circle->draw++;
     circle->PrintDraw();
 }
 
 template<>
-void Shape::Invoke<Shape::Move>( Circle* circle, double x, double y )
+void Shape::Invoke<Shape::Move>( tst::Circle* circle, double x, double y )
 {
     circle->move++;
     circle->PrintMove(x, y);
@@ -135,38 +142,38 @@ void Shape::Invoke<Shape::Move>( Circle* circle, double x, double y )
 
 
 template<>
-void Shape::Invoke<Shape::Draw>( const Rectangle* rectangle )
+void Shape::Invoke<Shape::Draw>( const tst::Rectangle* rectangle )
 {
     rectangle->PrintDraw();
 }
 
 template<>
-void Shape::Invoke<Shape::Move>( Rectangle* rectangle, double x, double y )
+void Shape::Invoke<Shape::Move>( tst::Rectangle* rectangle, double x, double y )
 {
     rectangle->move++;
     rectangle->PrintMove(x, y);
 }
 
 template<>
-void Shape::Invoke<Shape::Rotate>( Rectangle* rectangle, double x )
+void Shape::Invoke<Shape::Rotate>( tst::Rectangle* rectangle, double x )
 {
     rectangle->PrintRotate(x);
 }
 
 template<>
-void Shape::Invoke<Shape::Draw>( Triangle* triangle )
+void Shape::Invoke<Shape::Draw>( tst::Triangle* triangle )
 {
     triangle->PrintDraw();
 }
 
 template<>
-void Shape::Invoke<Shape::Move>( Triangle* triangle, double x, double y )
+void Shape::Invoke<Shape::Move>( tst::Triangle* triangle, double x, double y )
 {
     triangle->PrintMove(x, y);
 }
 
 template<>
-void Shape::Invoke<Shape::Rotate>( Triangle* triangle, double x )
+void Shape::Invoke<Shape::Rotate>( tst::Triangle* triangle, double x )
 {
     triangle->PrintRotate(x);
 }
@@ -188,27 +195,27 @@ static void Draw( T shape )
 
 TEST_CASE("Any Traits Basic", "[Any Traits][Basic]")
 {
-    Shape::Transform shape = Circle{};
+    Shape::Transform shape = tst::Circle{};
     shape.Call<Shape::Move>(1.5, 0.0);
 
-    Shape::Drawable draw_shape = shape.Get<Circle>();
+    Shape::Drawable draw_shape = shape.Get<tst::Circle>();
     //draw_shape.Call<Shape::Draw>();
 
-    using T = Shape::Drawable::typed_method_pointer<Shape::Draw, Circle>;
+    using T = Shape::Drawable::typed_method_pointer<Shape::Draw, tst::Circle>;
 
-    Shape::Rotatable rotate_shape = Rectangle{};
+    Shape::Rotatable rotate_shape = tst::Rectangle{};
 
-    Circle& s1 = shape.Get<Circle>();
+    tst::Circle& s1 = shape.Get<tst::Circle>();
 
     Shape::Transform shape2 = shape;
     //shape2.Call<Shape::Draw>();
-    Circle& s2 = shape2.Get<Circle>();
+    tst::Circle& s2 = shape2.Get<tst::Circle>();
 
-    shape = Rectangle{};
+    shape = tst::Rectangle{};
     shape.Call<Shape::Move>(0.5, 1.0);
     //shape.Call<Shape::Draw>();
 
-    shape = Triangle{};
+    shape = tst::Triangle{};
     shape.Call<Shape::Move>(1.0, 0.69);
     //shape.Call<Shape::Draw>();
 
@@ -223,8 +230,8 @@ TEST_CASE("Any Traits Basic", "[Any Traits][Basic]")
 
         BENCHMARK( "Any Basic" )
         {
-            Shape::Any circ = Circle{};
-            Shape::Any rect = Rectangle{};
+            Shape::Any circ = tst::Circle{};
+            Shape::Any rect = tst::Rectangle{};
 
             for ( size_t i = 0; i < 10'000; i++ )
             {
@@ -234,7 +241,7 @@ TEST_CASE("Any Traits Basic", "[Any Traits][Basic]")
                 rect.Call<Shape::Move>(0.5, 1.0);
             }
 
-            return circ.Get<Circle>();
+            return circ.Get<tst::Circle>();
         };
 
         BENCHMARK( "Virtual Basic" )
@@ -266,11 +273,11 @@ TEST_CASE("Any Traits Basic", "[Any Traits][Basic]")
             {
                 if ( dist(generator) )
                 {
-                    shapes.emplace_back( Circle{} );
+                    shapes.emplace_back( tst::Circle{} );
                 }
                 else
                 {
-                    shapes.emplace_back( Rectangle{} );
+                    shapes.emplace_back( tst::Rectangle{} );
                 }
             }
 
@@ -324,8 +331,8 @@ inline void Drawa( const Shape::Traits shape )
 
 TEST_CASE("Section 2")
 {
-    Circle c{};
-    const Circle* p = &c;
+    tst::Circle c{};
+    const tst::Circle* p = &c;
 
     const Shape::Traits traits(p);
     traits.Call<Shape::Draw>();

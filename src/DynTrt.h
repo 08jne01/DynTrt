@@ -67,13 +67,13 @@ namespace DynTrt
             using return_type = Ret;
             using arguments = detail::type_sequence<Args...>;
 
-            template<typename T>
-            using full_arguments = detail::type_sequence<T, Args...>;
+            template<typename Ty>
+            using full_arguments = detail::type_sequence<Ty, Args...>;
 
-            template<typename Trait, typename T, typename TyMethod>
+            template<typename Trait, typename Ty, typename TyMethod>
             static Ret DummyInvoke()
             {
-                return Trait::template Invoke<TyMethod>((T*)nullptr,Args{}...);
+                return Trait::template Invoke<TyMethod>((Ty*)nullptr,Args{}...);
             }
         };
     }   
@@ -224,7 +224,7 @@ namespace DynTrt
     template<typename TraitsType, typename... TyMethods>
     struct Trait
     {
-    private:
+    public:
         struct TypeInfo
         {
             std::size_t type_hash;
@@ -255,7 +255,7 @@ namespace DynTrt
         {
             static vtable<T> static_table = 
             std::make_tuple(
-                typed_method_pointer<TyMethods,T>(&TraitsType::template Invoke<TyMethods>)..., 
+                typed_method_pointer<TyMethods,T>(&TyMethods::template Invk<TraitsType, TyMethods>)..., 
                 TypeInfo{typeid(T).hash_code()} 
             );
             table = reinterpret_cast<vtable<void>*>(&static_table);
@@ -269,7 +269,7 @@ namespace DynTrt
         {
             static vtable<T> static_table = 
             std::make_tuple(
-                typed_method_pointer<TyMethods,T>(&TraitsType::template Invoke<TyMethods>)..., 
+                typed_method_pointer<TyMethods,T>(&TyMethods::template Invk<TraitsType, TyMethods>)..., 
                 TypeInfo{typeid(const T).hash_code()} 
             );
             table = reinterpret_cast<vtable<void>*>(&static_table);
@@ -333,23 +333,45 @@ namespace DynTrt
     template<typename TraitsType, typename... TyMethods>
     using Any = AnyValue<std::any, TraitsType, TyMethods...>;
 
-    template<typename TraitType, typename T>
-    struct Method;
-
     using Self = void*;
     using ConstSelf = const void*;
 
-    template<typename TraitType, typename Ret, typename Ty, typename... Ts>
-    struct Method<TraitType, Ret(Ty, Ts...)> : detail::Signature<Ret(Ty, Ts...)>
+    /// TyDefaultMethod : Method or void. If void no default. If method will try to call Method::Invoke(self,args...) (usually templated)
+    /// TyFunction : Function prototype including Self. Usually ReturnType(DynTrt::Self, Type1, Type2... TypeN);
+    /// Note: self can be either DynTrt::Self or DynTrt::ConstSelf for const functions.
+    template<typename TyDefaultMethod, typename TyFunction>
+    struct Method;
+
+    template<typename Ret, typename Ty, typename... Ts>
+    struct Method<void, Ret(Ty, Ts...)> : detail::Signature<Ret(Ty, Ts...)>
     {
         static constexpr bool defaulted = false;
+        template<typename Trait, typename TyMethod, typename T>
+        static inline Ret Invk( T* value, Ts... args )
+        {
+            return Trait::template Invoke<TyMethod>(value, args...);
+        }
+    };
+
+    template<typename TyDefaultMethod, typename Ret, typename Ty, typename... Ts>
+    struct Method<TyDefaultMethod, Ret(Ty, Ts...)> : detail::Signature<Ret(Ty, Ts...)>
+    {
+        static constexpr bool defaulted = true;
         using TyMethod = detail::Signature<Ret(Ts...)>;
 
-        template<typename T>
-        static inline Ret Invoke( T value, Ts... args )
+        template<typename Trait, typename TyMethod, typename T>
+        requires( std::derived_from<TyDefaultMethod, Method> )
+        static inline Ret Invk( T* value, Ts... args )
         {
-            return TraitType::Invoke(value, args...);
+            return TyDefaultMethod::Invoke(value, args...);
         }
+    };
+
+    struct Traits
+    {
+        // Default template to specialise with the respective Methods and Types.
+        template<typename Method, typename T, typename... Ts>
+        static inline Method::return_type Invoke( T*, Ts... );
     };
 }
 
