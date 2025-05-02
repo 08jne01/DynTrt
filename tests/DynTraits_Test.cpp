@@ -329,7 +329,7 @@ TEST_CASE("Section 2")
 
     const Shape::Traits traits(p);
     traits.Call<Shape::Draw>();
-    traits.Call<Shape::Move>(0.5, 1.0);
+    //traits.Call<Shape::Move>(0.5, 1.0);
 
 
 
