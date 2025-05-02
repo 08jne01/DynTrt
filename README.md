@@ -142,3 +142,5 @@ Like in Rust traits here are wide pointers, they store a pointer to the variable
 The virtual function table (vtable) maps the function call type `Shape::Draw`, `Shape::Move` to the function pointers `Shape::Invoke<Shape::Draw>` etc. When a type is passed into the constructor of a trait data pointer is saved and the vtable pointer is retrieved based on the type info (there is one vtable for each instantiated type in a trait).
 
 Note the vtables are only ever created at compile time so if you don't have any instances of your traits you will not have any vtables.
+
+I have checked the compiled assembly with MSVC there is only one call (one level of indirection). The function pointer is loaded and it calls directly to the function you defined. This means theoretically it should be the same as a virtual function call, that being said compilers are smart and can de-virtualise some function calls whereas it will not do this for this implementation. Benchmark todo.
