@@ -51,7 +51,7 @@ namespace AnyTraits
         template<typename Ret, typename... Args>
         struct Signature<Ret(Args...)> {
             template<typename TyStorage>
-            using any_pointer = Ret(*)(TyStorage&, Args...);
+            using any_pointer = Ret(*)(TyStorage, Args...);
 
             template<typename TyStorage>
             using any_type = std::remove_pointer_t<any_pointer<TyStorage>>;
@@ -62,6 +62,12 @@ namespace AnyTraits
 
             template<typename T>
             using full_arguments = detail::type_sequence<T, Args...>;
+
+            template<typename Trait, typename T, typename Method>
+            static Ret DummyInvoke()
+            {
+                return Trait::template Invoke<Method>((T*)nullptr,Args{}...);
+            }
         };
     }   
     
@@ -73,9 +79,14 @@ namespace AnyTraits
         { Traits::template Invoke<Method>(value, args...) };
     };
 
-    template<typename Trait, typename Ret, typename... Ts>
-    concept HasOverload = requires(Ts... args) {
-        { Trait::Invoke(args...) } -> std::same_as<Ret>;
+    // template<typename Trait, typename Ret, typename... Ts>
+    // concept HasOverload = requires(Ts... args) {
+    //     { Trait::Invoke(args...) } -> std::same_as<Ret>;
+    // };
+
+    template<typename Trait, typename T, typename Method>
+    concept HasOverload = requires() {
+        { Method::template DummyInvoke<Trait,T,Method>() } -> std::same_as<typename Method::return_type>;
     };
 
     // template<typename Trait, typename Ret, typename... Ts>
@@ -125,9 +136,16 @@ namespace AnyTraits
     struct AnyValue
     {
         
+        using data_pointer = void*;
+
+        template<typename Method, typename T>
+        using typed_method_pointer = typename Method::template any_pointer<T*>;
+
         template<typename Method>
-        using method_pointer = typename Method::template any_pointer<TyStorage>;
-        using vtable = std::tuple<method_pointer<Methods>...>; //...
+        using method_pointer = typename Method::template any_pointer<data_pointer>;
+
+        template<typename T>
+        using vtable = std::tuple<typed_method_pointer<Methods,T>...>; //...
         
         // Just below we do p(InvokeStatic) where p is the corresponding function type (saved in Method)
         // same way we do vtable above but just passing InvokeStatic in.
@@ -144,10 +162,19 @@ namespace AnyTraits
         //
 
         template<typename T>
+        requires( 
+            (HasOverload<TraitsType, T, Methods> && ...)
+        )
         AnyValue( T value ): 
-            storage(std::move(value)),
-            table( std::make_tuple(method_pointer<Methods>(InvokeStatic<Methods, T>)... ) ) // Fucking horrible why can't we just expand type_sequence...
+            storage(std::move(value))
+            //table(  ) // Fucking horrible why can't we just expand type_sequence...
         {
+            static vtable<T> static_table = 
+            std::make_tuple(
+                typed_method_pointer<Methods,T>(&TraitsType::template Invoke<Methods>)... 
+            );
+            //static vtable static_table = std::make_tuple(method_pointer<Methods>(InvokeStatic<Methods, T>)... );
+            table = reinterpret_cast<vtable<void>*>(&static_table);
         }
     private:
         template<typename Ty>
@@ -155,50 +182,6 @@ namespace AnyTraits
 
         template<typename Ty, bool check=false>
         static Ty Cast( const TyStorage& storage ) { return storage.template cast<Ty,check>(); } // not checked here since we are casting
-
-        template<typename Method, typename T, typename Ret, typename Ty, typename... Ts>
-        requires( HasOverload<Method, T, Ts...> )
-        static Ret InvokeStatic( Ty storage, Ts... args )
-        {
-            T* value = Cast<T*>(storage);
-            static_assert( HasMethod<TraitsType, Method, T, decltype(args)...>, "Object is missing required trait" );
-            return Method::Invoke(*value, args...);
-        }
-
-        template<typename Method, typename T, typename Ret, typename Ty, typename... Ts>
-        requires( ! HasOverload<Method, T, Ts...> )
-        static Ret InvokeStatic( Ty storage, Ts... args )
-        {
-            T* value = Cast<T*>(storage);
-            static_assert( HasMethod<TraitsType, Method, T, decltype(args)...>, "Object is missing required trait" );
-            return TraitsType::template Invoke<Method>(*value, args...);
-        }
-
-
-        // template<typename Method, typename T>
-        // requires( Method::defaulted )
-        // auto MakeInvoke()
-        // {
-        //     return [](const AnyStorage<> storage, auto... args ){
-        //         //T value = std::any_cast<T>(storage);
-        //         T value = storage.cast<T>();
-        //         static_assert( HasMethod<TraitsType, Method, T, decltype(args)...>, "Object is missing required trait" );
-        //         return Method::Invoke(value, args...);
-        //     };
-        // }
-
-        // template<typename Method, typename T>
-        // requires( ! Method::defaulted )
-        // auto MakeInvoke()
-        // {
-        //     return [](const AnyStorage<> storage, auto... args ){
-        //         //T value = std::any_cast<T>(storage);
-        //         T value = storage.cast<T>();
-        //         static_assert( HasMethod<TraitsType, Method, T, decltype(args)...>, "Object is missing required trait" );
-        //         //static_assert( HasOverload<Method, T, decltype(args)...>, "Object (T) is missing required trait" );
-        //         return TraitsType::template Invoke<Method>(value, args...);
-        //     };
-        // }
     public:
         template<typename Method, typename... Ts>
         requires (
@@ -208,16 +191,96 @@ namespace AnyTraits
         auto Call(Ts... args)
         {
             constexpr size_t n = detail::index_in_pack<Method, Methods...>::value;
-            return std::get<n>(table)(storage, args...);
+            return std::get<n>(*table)(&storage, args...);
         }
 
         template<typename T>
         T& Get() { return *storage.template cast<T*,true>(); }
 
     private:
-        vtable table;
+        vtable<void>* table;
         TyStorage storage;
     };
+
+    template<typename TraitsType, typename... Methods>
+    struct Traits
+    {
+    private:
+        struct TypeInfo
+        {
+            std::size_t type_hash;
+        };
+        using data_pointer = void*;
+
+        template<typename Method, typename T>
+        using typed_method_pointer = typename Method::template any_pointer<T*>;
+
+        template<typename Method>
+        using method_pointer = typename Method::template any_pointer<data_pointer>;
+
+        template<typename T>
+        using vtable = std::tuple<typed_method_pointer<Methods,T>...,TypeInfo>; //...
+        
+    public:
+        Traits( const Traits& )=default;
+        Traits( Traits&& )=default;
+
+        Traits& operator=( const Traits& )=default;
+        Traits& operator=( Traits&& )=default;
+
+        template<typename T>
+        requires( 
+            (HasOverload<TraitsType, T, Methods> && ...)
+        )
+        Traits( T* value ): pointer(value)
+        {
+            static vtable<T> static_table = 
+            std::make_tuple(
+                typed_method_pointer<Methods,T>(&TraitsType::template Invoke<Methods>)..., 
+                TypeInfo{typeid(T).hash_code()} 
+            );
+
+            table = reinterpret_cast<vtable<void>*>(&static_table);
+        }
+        
+        template<typename Method, typename... Ts>
+        requires (
+            BoundMethod<Method,Methods...> &&
+            std::same_as<typename Method::arguments, detail::type_sequence<Ts...>>
+        )
+        inline auto Call(Ts... args)
+        {
+            constexpr size_t n = detail::index_in_pack<Method, Methods...>::value;
+            return std::get<n>(*table)(pointer, args...);
+        }
+
+        template<typename T>
+        inline T* Get() 
+        {
+            constexpr size_t n = detail::index_in_pack<TypeInfo, Methods...>::value;
+            const std::size_t type_hash = std::get<n>(*table ).type_hash;
+            if ( type_hash != typeid(T).hash_code() )
+                return nullptr;
+
+            return reinterpret_cast<T*>(pointer);
+        }
+
+        template<typename T>
+        inline const T* Get() const
+        {
+            constexpr size_t n = detail::index_in_pack<TypeInfo, Methods...>::value;
+            const std::size_t type_hash = std::get<n>(*table).type_hash;
+            if ( type_hash != typeid(T).hash_code() )
+                return nullptr;
+
+            return reinterpret_cast<const T*>(pointer);
+        }
+
+    private:
+        vtable<void>* table = nullptr;
+        void* pointer = nullptr;
+    };
+
 
     template<size_t N, typename TraitsType, typename... Methods>
     using AnySmall = AnyValue<AnyStorage<N>, TraitsType, Methods...>;
@@ -235,7 +298,7 @@ namespace AnyTraits
         using Method = detail::Signature<Ret(Ts...)>;
 
         template<typename T>
-        inline static Ret Invoke( T value, Ts... args )
+        static inline Ret Invoke( T value, Ts... args )
         {
             return TraitType::Invoke(value, args...);
         }

@@ -60,7 +60,7 @@ struct Triangle
 
 #define ANY_INVOKE_DEFINITION() \
     template<typename Method, typename T, typename... Ts> \
-    static Method::return_type Invoke( T&, Ts... )
+    static inline Method::return_type Invoke( T*, Ts... )
 
 
 struct Shape
@@ -89,6 +89,7 @@ struct Shape
     using Drawable =    AnyTraits::AnySmall<16, Shape, Draw>;
 
     using Any = AnyTraits::AnySmall<16, Shape, Move, Draw>;
+    using Traits = AnyTraits::Traits<Shape, Shape::Move, Shape::Draw>;
 };
 
 // struct Shape
@@ -122,56 +123,56 @@ struct Shape
 // };
 
 template<>
-void Shape::Invoke<Shape::Draw>( Circle& circle )
+void Shape::Invoke<Shape::Draw>( Circle* circle )
 {
-    circle.draw++;
-    circle.PrintDraw();
+    circle->draw++;
+    circle->PrintDraw();
 }
 
 template<>
-void Shape::Invoke<Shape::Move>( Circle& circle, double x, double y )
+void Shape::Invoke<Shape::Move>( Circle* circle, double x, double y )
 {
-    circle.move++;
-    circle.PrintMove(x, y);
+    circle->move++;
+    circle->PrintMove(x, y);
 }
 
 
 template<>
-void Shape::Invoke<Shape::Draw>( Rectangle& rectangle )
+void Shape::Invoke<Shape::Draw>( Rectangle* rectangle )
 {
-    rectangle.draw++;
-    rectangle.PrintDraw();
+    rectangle->draw++;
+    rectangle->PrintDraw();
 }
 
 template<>
-void Shape::Invoke<Shape::Move>( Rectangle& rectangle, double x, double y )
+void Shape::Invoke<Shape::Move>( Rectangle* rectangle, double x, double y )
 {
-    rectangle.move++;
-    rectangle.PrintMove(x, y);
+    rectangle->move++;
+    rectangle->PrintMove(x, y);
 }
 
 template<>
-void Shape::Invoke<Shape::Rotate>( Rectangle& rectangle, double x )
+void Shape::Invoke<Shape::Rotate>( Rectangle* rectangle, double x )
 {
-    rectangle.PrintRotate(x);
+    rectangle->PrintRotate(x);
 }
 
 template<>
-void Shape::Invoke<Shape::Draw>( Triangle& triangle )
+void Shape::Invoke<Shape::Draw>( Triangle* triangle )
 {
-    triangle.PrintDraw();
+    triangle->PrintDraw();
 }
 
 template<>
-void Shape::Invoke<Shape::Move>( Triangle& triangle, double x, double y )
+void Shape::Invoke<Shape::Move>( Triangle* triangle, double x, double y )
 {
-    triangle.PrintMove(x, y);
+    triangle->PrintMove(x, y);
 }
 
 template<>
-void Shape::Invoke<Shape::Rotate>( Triangle& triangle, double x )
+void Shape::Invoke<Shape::Rotate>( Triangle* triangle, double x )
 {
-    triangle.PrintRotate(x);
+    triangle->PrintRotate(x);
 }
 
 template<typename T>
@@ -316,8 +317,31 @@ TEST_CASE("Any Traits Basic", "[Any Traits][Basic]")
             return shapes;
         };
     }
+}
+
+inline void Draw( Shape::Traits shape )
+{
+    shape.Call<Shape::Draw>();
+}
+
+TEST_CASE("Section 2")
+{
+    Circle c{};
+    Shape::Traits traits(&c);
+
+    //Shape::Move::DummyInvoke<Shape,Circle,Shape::Move>();
+
+    traits.Call<Shape::Move>(0.5, 1.0);
+    traits.Call<Shape::Draw>();
+
+    Draw(&c);
 
 
+    // using p1 = Shape::Traits::typed_method_pointer<Shape::Move, Circle>;
+    // using p2 = Shape::Traits::method_pointer<Shape::Move>;
+
+    // auto p = (Shape::Traits::method_pointer<Shape::Move>)Shape::Traits::typed_method_pointer<Shape::Move,Circle>(Shape::Invoke<Shape::Move,Circle>);
+    // using p3 = Shape::Traits::vtable<void>;
 }
 
 // static void Shape::Invoke<Shape::Move,AnyStorage<16>,double,double>(AnyStorage<16>,double,double)
