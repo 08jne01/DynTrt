@@ -3,7 +3,7 @@
 #include <type_traits>
 #include <tuple>
 #include <any>
-namespace AnyTraits
+namespace DynTrt
 {
     namespace detail
     {
@@ -48,13 +48,20 @@ namespace AnyTraits
         template<typename T>
         struct Signature;
 
-        template<typename Ret, typename... Args>
-        struct Signature<Ret(Args...)> {
-            template<typename TyStorage>
-            using any_pointer = Ret(*)(TyStorage, Args...);
+        template<typename Ret, typename T, typename... Args>
+        requires( std::same_as<T, void> || std::same_as<T, const void> )
+        struct Signature<Ret(T*, Args...)> {
+
+            static constexpr bool is_const = std::is_const_v<T>;
+
+            template<typename Ty>
+            using const_correct = std::conditional_t<std::is_const_v<T>, std::add_const_t<Ty>, Ty>;
 
             template<typename TyStorage>
-            using any_type = std::remove_pointer_t<any_pointer<TyStorage>>;
+            using any_pointer = Ret(*)(const_correct<TyStorage>*, Args...);
+
+            //template<typename TyStorage>
+            //using any_type = std::remove_pointer_t<any_pointer<TyStorage>>;
             //using overload_type = Ret(TAny,Args...);
             //using overload_pointer = Ret(*)(TAny,Args...);
             using return_type = Ret;
@@ -136,10 +143,10 @@ namespace AnyTraits
     struct AnyValue
     {
         
-        using data_pointer = void*;
+        using data_pointer = void;
 
         template<typename Method, typename T>
-        using typed_method_pointer = typename Method::template any_pointer<T*>;
+        using typed_method_pointer = typename Method::template any_pointer<T>;
 
         template<typename Method>
         using method_pointer = typename Method::template any_pointer<data_pointer>;
@@ -165,7 +172,7 @@ namespace AnyTraits
         requires( 
             (HasOverload<TraitsType, T, Methods> && ...)
         )
-        AnyValue( T value ): 
+        AnyValue( const T& value ): 
             storage(std::move(value))
             //table(  ) // Fucking horrible why can't we just expand type_sequence...
         {
@@ -176,6 +183,7 @@ namespace AnyTraits
             //static vtable static_table = std::make_tuple(method_pointer<Methods>(InvokeStatic<Methods, T>)... );
             table = reinterpret_cast<vtable<void>*>(&static_table);
         }
+
     private:
         template<typename Ty>
         static Ty Cast( const std::any& storage ) { std::any_cast<Ty>(storage); }
@@ -189,6 +197,17 @@ namespace AnyTraits
             std::same_as<typename Method::arguments, detail::type_sequence<Ts...>>
         )
         auto Call(Ts... args)
+        {
+            constexpr size_t n = detail::index_in_pack<Method, Methods...>::value;
+            return std::get<n>(*table)(&storage, args...);
+        }
+
+        template<typename Method, typename... Ts>
+        requires (
+            BoundMethod<Method,Methods...> &&
+            std::same_as<typename Method::arguments, detail::type_sequence<Ts...>>
+        )
+        auto Call(Ts... args) const
         {
             constexpr size_t n = detail::index_in_pack<Method, Methods...>::value;
             return std::get<n>(*table)(&storage, args...);
@@ -210,10 +229,10 @@ namespace AnyTraits
         {
             std::size_t type_hash;
         };
-        using data_pointer = void*;
+        using data_pointer = void;
 
         template<typename Method, typename T>
-        using typed_method_pointer = typename Method::template any_pointer<T*>;
+        using typed_method_pointer = typename Method::template any_pointer<T>;
 
         template<typename Method>
         using method_pointer = typename Method::template any_pointer<data_pointer>;
@@ -239,16 +258,42 @@ namespace AnyTraits
                 typed_method_pointer<Methods,T>(&TraitsType::template Invoke<Methods>)..., 
                 TypeInfo{typeid(T).hash_code()} 
             );
+            table = reinterpret_cast<vtable<void>*>(&static_table);
+        }
 
+        template<typename T>
+        requires( 
+            (HasOverload<TraitsType, T, Methods> && ...)
+        )
+        Traits( const T* value ): pointer(const_cast<T*>(value))
+        {
+            static vtable<T> static_table = 
+            std::make_tuple(
+                typed_method_pointer<Methods,T>(&TraitsType::template Invoke<Methods>)..., 
+                TypeInfo{typeid(const T).hash_code()} 
+            );
             table = reinterpret_cast<vtable<void>*>(&static_table);
         }
         
         template<typename Method, typename... Ts>
         requires (
             BoundMethod<Method,Methods...> &&
+            ! Method::is_const &&
             std::same_as<typename Method::arguments, detail::type_sequence<Ts...>>
         )
         inline auto Call(Ts... args)
+        {
+            constexpr size_t n = detail::index_in_pack<Method, Methods...>::value;
+            return std::get<n>(*table)(pointer, args...);
+        }
+
+        template<typename Method, typename... Ts>
+        requires (
+            Method::is_const &&
+            BoundMethod<Method,Methods...> &&
+            std::same_as<typename Method::arguments, detail::type_sequence<Ts...>>
+        )
+        inline auto Call(Ts... args) const
         {
             constexpr size_t n = detail::index_in_pack<Method, Methods...>::value;
             return std::get<n>(*table)(pointer, args...);
@@ -276,7 +321,7 @@ namespace AnyTraits
             return reinterpret_cast<const T*>(pointer);
         }
 
-    private:
+    public:
         vtable<void>* table = nullptr;
         void* pointer = nullptr;
     };
@@ -291,8 +336,11 @@ namespace AnyTraits
     template<typename TraitType, typename T>
     struct Trait;
 
-    template<typename TraitType, typename Ret, typename... Ts>
-    struct Trait<TraitType, Ret(Ts...)> : detail::Signature<Ret(Ts...)>
+    using Self = void*;
+    using ConstSelf = const void*;
+
+    template<typename TraitType, typename Ret, typename Ty, typename... Ts>
+    struct Trait<TraitType, Ret(Ty, Ts...)> : detail::Signature<Ret(Ty, Ts...)>
     {
         static constexpr bool defaulted = false;
         using Method = detail::Signature<Ret(Ts...)>;

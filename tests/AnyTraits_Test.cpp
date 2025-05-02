@@ -6,12 +6,12 @@
 #include <random>
 #include <variant>
 
-#include "AnyTraits.h"
+#include "DynTrt.h"
 
 struct Circle
 {
     void PrintMove(double x, double y) { printf("Circle Move, (%lf,%lf)\n", x, y); }
-    void PrintDraw() { printf("Circle Draw\n"); }
+    void PrintDraw() const { printf("Circle Draw\n"); }
 
     inline void Move(double x, double y)
     {
@@ -31,7 +31,7 @@ struct Circle
 struct Rectangle
 {
     void PrintMove(double x, double y) { printf("Rectangle Move, (%lf,%lf)\n", x, y); }
-    void PrintDraw() { printf("Rectangle Draw\n"); }
+    void PrintDraw() const { printf("Rectangle Draw\n"); }
     void PrintRotate(double x) { printf("Rectangle Rotate: %lf\n", x); }
 
 
@@ -68,39 +68,36 @@ struct Shape
     ANY_INVOKE_DEFINITION();
 
     // Render
-    struct Draw     : AnyTraits::Trait<Shape,void()> {};
-    
+    struct Draw :   DynTrt::Trait<Shape, void(DynTrt::ConstSelf)> {};
     // Transform
-    struct Move     : AnyTraits::Trait<Shape,void(double x, double y)> {};
-    struct Scale     : AnyTraits::Trait<Shape,void()> {};
-
+    struct Move :   DynTrt::Trait<Shape, void(DynTrt::Self, double x, double y)> {};
+    struct Scale :  DynTrt::Trait<Shape, void(DynTrt::Self)> {};
     // Modfiy
-    struct Slice     : AnyTraits::Trait<Shape,void()> {};
-
+    struct Slice :  DynTrt::Trait<Shape, void(DynTrt::Self)> {};
     // Rotatable
-    struct Rotate     : AnyTraits::Trait<Shape,void(double)> {};
+    struct Rotate : DynTrt::Trait<Shape, void(DynTrt::Self, double)> {};
 
     
 
     // define type which traits belong to
-    using Transform =   AnyTraits::AnySmall<16, Shape, Move>;
-    using Modify =      AnyTraits::AnySmall<16, Shape, Slice>;
-    using Rotatable =   AnyTraits::AnySmall<16, Shape, Rotate>;
-    using Drawable =    AnyTraits::AnySmall<16, Shape, Draw>;
+    using Transform =   DynTrt::AnySmall<16, Shape, Move>;
+    using Modify =      DynTrt::AnySmall<16, Shape, Slice>;
+    using Rotatable =   DynTrt::AnySmall<16, Shape, Rotate>;
+    using Drawable =    DynTrt::AnySmall<16, Shape, Draw>;
 
-    using Any = AnyTraits::AnySmall<16, Shape, Move, Draw>;
-    using Traits = AnyTraits::Traits<Shape, Shape::Move, Shape::Draw>;
+    using Any = DynTrt::AnySmall<16, Shape, Move, Draw>;
+    using Traits = DynTrt::Traits<Shape, Shape::Move, Shape::Draw>;
 };
 
 // struct Shape
 // {
 //     ANY_INVOKE_DEFINITION();
 
-//     struct Move     : AnyTraits::Trait<Shape,void(double x, double y)> {};
-//     struct Draw     : AnyTraits::Trait<Shape,void()> {};
-//     struct Scale    : AnyTraits::Trait<Shape,void()> {};
+//     struct Move     : DynTrt::Trait<Shape,void(double x, double y)> {};
+//     struct Draw     : DynTrt::Trait<Shape,void()> {};
+//     struct Scale    : DynTrt::Trait<Shape,void()> {};
 //     //defaulted function
-//     struct Rotate   : AnyTraits::Trait<Shape,void(double)> {
+//     struct Rotate   : DynTrt::Trait<Shape,void(double)> {
 //         template<typename T>
 //         static void Invoke(T value, double rotation) 
 //         {
@@ -109,13 +106,13 @@ struct Shape
 //     };
 
 //     // define type which traits belong to
-//     using Any = AnyTraits::AnySmall<16, Shape, 
+//     using Any = DynTrt::AnySmall<16, Shape, 
 //         Move, 
 //         Draw
 //     >;
 
 //     // you can have multiple type groupings using the same traits
-//     using Transform = AnyTraits::AnySmall<16, Shape, 
+//     using Transform = DynTrt::AnySmall<16, Shape, 
 //         Move, 
 //         Scale, 
 //         Rotate
@@ -123,9 +120,9 @@ struct Shape
 // };
 
 template<>
-void Shape::Invoke<Shape::Draw>( Circle* circle )
+void Shape::Invoke<Shape::Draw>( const Circle* circle )
 {
-    circle->draw++;
+    //circle->draw++;
     circle->PrintDraw();
 }
 
@@ -138,9 +135,8 @@ void Shape::Invoke<Shape::Move>( Circle* circle, double x, double y )
 
 
 template<>
-void Shape::Invoke<Shape::Draw>( Rectangle* rectangle )
+void Shape::Invoke<Shape::Draw>( const Rectangle* rectangle )
 {
-    rectangle->draw++;
     rectangle->PrintDraw();
 }
 
@@ -179,7 +175,7 @@ template<typename T>
 struct Invoker;
 
 template<typename... Ts>
-struct Invoker<AnyTraits::detail::type_sequence<Ts...>>
+struct Invoker<DynTrt::detail::type_sequence<Ts...>>
 {
 
 };
@@ -196,7 +192,9 @@ TEST_CASE("Any Traits Basic", "[Any Traits][Basic]")
     shape.Call<Shape::Move>(1.5, 0.0);
 
     Shape::Drawable draw_shape = shape.Get<Circle>();
-    draw_shape.Call<Shape::Draw>();
+    //draw_shape.Call<Shape::Draw>();
+
+    using T = Shape::Drawable::typed_method_pointer<Shape::Draw, Circle>;
 
     Shape::Rotatable rotate_shape = Rectangle{};
 
@@ -319,25 +317,31 @@ TEST_CASE("Any Traits Basic", "[Any Traits][Basic]")
     }
 }
 
-inline void Draw( Shape::Traits shape )
+inline void Drawa( const Shape::Traits shape )
 {
-    shape.Call<Shape::Draw>();
+    //.Call<Shape::Draw>();
 }
 
 TEST_CASE("Section 2")
 {
     Circle c{};
-    Shape::Traits traits(&c);
+    const Circle* p = &c;
+
+    const Shape::Traits traits(p);
+    traits.Call<Shape::Draw>();
+    traits.Call<Shape::Move>(0.5, 1.0);
+
+
 
     //Shape::Move::DummyInvoke<Shape,Circle,Shape::Move>();
 
-    traits.Call<Shape::Move>(0.5, 1.0);
-    traits.Call<Shape::Draw>();
+    //traits.Call<Shape::Move>(0.5, 1.0);
+    //traits.Call<Shape::Draw>();
 
-    Draw(&c);
+    //Draw(&c);
 
 
-    // using p1 = Shape::Traits::typed_method_pointer<Shape::Move, Circle>;
+    //using p1 = Shape::Draw::Signature::const_correct<void>;
     // using p2 = Shape::Traits::method_pointer<Shape::Move>;
 
     // auto p = (Shape::Traits::method_pointer<Shape::Move>)Shape::Traits::typed_method_pointer<Shape::Move,Circle>(Shape::Invoke<Shape::Move,Circle>);
