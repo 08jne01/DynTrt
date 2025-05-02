@@ -222,7 +222,7 @@ namespace DynTrt
     };
 
     template<typename TraitsType, typename... Methods>
-    struct Traits
+    struct Trait
     {
     private:
         struct TypeInfo
@@ -241,17 +241,17 @@ namespace DynTrt
         using vtable = std::tuple<typed_method_pointer<Methods,T>...,TypeInfo>; //...
         
     public:
-        Traits( const Traits& )=default;
-        Traits( Traits&& )=default;
+        Trait( const Trait& )=default;
+        Trait( Trait&& )=default;
 
-        Traits& operator=( const Traits& )=default;
-        Traits& operator=( Traits&& )=default;
+        Trait& operator=( const Trait& )=default;
+        Trait& operator=( Trait&& )=default;
 
         template<typename T>
         requires( 
             (HasOverload<TraitsType, T, Methods> && ...)
         )
-        Traits( T* value ): pointer(value)
+        Trait( T* value ): pointer(value)
         {
             static vtable<T> static_table = 
             std::make_tuple(
@@ -265,7 +265,7 @@ namespace DynTrt
         requires( 
             (HasOverload<TraitsType, T, Methods> && ...)
         )
-        Traits( const T* value ): pointer(const_cast<T*>(value))
+        Trait( const T* value ): pointer(const_cast<T*>(value))
         {
             static vtable<T> static_table = 
             std::make_tuple(
@@ -334,16 +334,16 @@ namespace DynTrt
     using Any = AnyValue<std::any, TraitsType, Methods...>;
 
     template<typename TraitType, typename T>
-    struct Trait;
+    struct Method;
 
     using Self = void*;
     using ConstSelf = const void*;
 
     template<typename TraitType, typename Ret, typename Ty, typename... Ts>
-    struct Trait<TraitType, Ret(Ty, Ts...)> : detail::Signature<Ret(Ty, Ts...)>
+    struct Method<TraitType, Ret(Ty, Ts...)> : detail::Signature<Ret(Ty, Ts...)>
     {
         static constexpr bool defaulted = false;
-        using Method = detail::Signature<Ret(Ts...)>;
+        using TyMethod = detail::Signature<Ret(Ts...)>;
 
         template<typename T>
         static inline Ret Invoke( T value, Ts... args )

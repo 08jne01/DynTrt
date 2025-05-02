@@ -68,14 +68,14 @@ struct Shape
     ANY_INVOKE_DEFINITION();
 
     // Render
-    struct Draw :   DynTrt::Trait<Shape, void(DynTrt::ConstSelf)> {};
+    struct Draw :   DynTrt::Method<Shape, void(DynTrt::ConstSelf)> {};
     // Transform
-    struct Move :   DynTrt::Trait<Shape, void(DynTrt::Self, double x, double y)> {};
-    struct Scale :  DynTrt::Trait<Shape, void(DynTrt::Self)> {};
+    struct Move :   DynTrt::Method<Shape, void(DynTrt::Self, double x, double y)> {};
+    struct Scale :  DynTrt::Method<Shape, void(DynTrt::Self)> {};
     // Modfiy
-    struct Slice :  DynTrt::Trait<Shape, void(DynTrt::Self)> {};
+    struct Slice :  DynTrt::Method<Shape, void(DynTrt::Self)> {};
     // Rotatable
-    struct Rotate : DynTrt::Trait<Shape, void(DynTrt::Self, double)> {};
+    struct Rotate : DynTrt::Method<Shape, void(DynTrt::Self, double)> {};
 
     
 
@@ -86,7 +86,7 @@ struct Shape
     using Drawable =    DynTrt::AnySmall<16, Shape, Draw>;
 
     using Any = DynTrt::AnySmall<16, Shape, Move, Draw>;
-    using Traits = DynTrt::Traits<Shape, Shape::Move, Shape::Draw>;
+    using Traits = DynTrt::Trait<Shape, Shape::Move, Shape::Draw>;
 };
 
 // struct Shape
