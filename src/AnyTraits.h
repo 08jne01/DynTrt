@@ -50,11 +50,8 @@ namespace AnyTraits
 
         template<typename Ret, typename... Args>
         struct Signature<Ret(Args...)> {
-            using type = Ret(std::any,Args...);
-
-
             template<typename TyStorage>
-            using any_pointer = Ret(*)(TyStorage, Args...);
+            using any_pointer = Ret(*)(TyStorage&, Args...);
 
             template<typename TyStorage>
             using any_type = std::remove_pointer_t<any_pointer<TyStorage>>;
@@ -81,6 +78,12 @@ namespace AnyTraits
         { Trait::Invoke(args...) } -> std::same_as<Ret>;
     };
 
+    // template<typename Trait, typename Ret, typename... Ts>
+    // concept Invokable = requires( Ts... args )
+    // {
+
+    // }
+
     template<typename T>
     concept Anyable = 
         std::is_trivially_copyable_v<T> &&
@@ -92,18 +95,26 @@ namespace AnyTraits
         template<typename T>
         explicit AnyStorage(const T& value): type_hash(typeid(T).hash_code())
         {
-            static_assert(sizeof(T) < N,  "Type to big to fit into AnyStorage");
+            static_assert(sizeof(T) <= N,  "Type to big to fit into AnyStorage");
             memcpy(buffer, &value, sizeof(T));
         }
 
-        template<typename T>
+        template<typename T, bool checked=true>
         T cast() const
         {
-            if ( typeid(T).hash_code() != type_hash )
-                throw std::bad_any_cast();
-            return *(T*)buffer;
-        }
+            using V = std::remove_pointer_t<T>;
 
+            if constexpr ( checked )
+            {
+                if ( typeid(V).hash_code() != type_hash )
+                    throw std::bad_any_cast();
+            }
+
+            if constexpr ( std::is_same_v<T, std::remove_pointer_t<T>> )
+                return *(T*)buffer;
+            else
+                return (V*)buffer;
+        }
         alignas(std::max_align_t) std::byte buffer[N];
         std::size_t type_hash; 
     };
@@ -127,25 +138,40 @@ namespace AnyTraits
         AnyValue& operator=( const AnyValue& )=default;
         AnyValue& operator=( AnyValue&& )=default;
 
+        // 
+        // Draw
+        // Move
+        //
+
         template<typename T>
-        AnyValue( const T& value ): 
-            storage(value),
+        AnyValue( T value ): 
+            storage(std::move(value)),
             table( std::make_tuple(method_pointer<Methods>(InvokeStatic<Methods, T>)... ) ) // Fucking horrible why can't we just expand type_sequence...
         {
         }
-
+    private:
         template<typename Ty>
         static Ty Cast( const std::any& storage ) { std::any_cast<Ty>(storage); }
 
-        template<typename Ty, size_t N>
-        static Ty Cast( const AnyStorage<N>& storage ) { return storage.template cast<Ty>(); }
+        template<typename Ty, bool check=false>
+        static Ty Cast( const TyStorage& storage ) { return storage.template cast<Ty,check>(); } // not checked here since we are casting
 
         template<typename Method, typename T, typename Ret, typename Ty, typename... Ts>
+        requires( HasOverload<Method, T, Ts...> )
         static Ret InvokeStatic( Ty storage, Ts... args )
         {
-            T value = Cast<T>(storage);
+            T* value = Cast<T*>(storage);
             static_assert( HasMethod<TraitsType, Method, T, decltype(args)...>, "Object is missing required trait" );
-            return TraitsType::template Invoke<Method>(value, args...);
+            return Method::Invoke(*value, args...);
+        }
+
+        template<typename Method, typename T, typename Ret, typename Ty, typename... Ts>
+        requires( ! HasOverload<Method, T, Ts...> )
+        static Ret InvokeStatic( Ty storage, Ts... args )
+        {
+            T* value = Cast<T*>(storage);
+            static_assert( HasMethod<TraitsType, Method, T, decltype(args)...>, "Object is missing required trait" );
+            return TraitsType::template Invoke<Method>(*value, args...);
         }
 
 
@@ -173,7 +199,7 @@ namespace AnyTraits
         //         return TraitsType::template Invoke<Method>(value, args...);
         //     };
         // }
-
+    public:
         template<typename Method, typename... Ts>
         requires (
             BoundMethod<Method,Methods...> &&
@@ -185,8 +211,10 @@ namespace AnyTraits
             return std::get<n>(table)(storage, args...);
         }
 
+        template<typename T>
+        T& Get() { return *storage.template cast<T*,true>(); }
 
-    public:
+    private:
         vtable table;
         TyStorage storage;
     };
