@@ -18,7 +18,7 @@ target_include_directories( DynTrt INTERFACE "src/include" )
 add_subdirectory("ext/catch2")
 file(GLOB_RECURSE test_list "tests/*.c" "tests/*.cpp")
 add_executable( DynTrtTests ${test_list} )
-
+target_include_directories( DynTrtTests PRIVATE "src/misc" )
 target_link_libraries( DynTrtTests PRIVATE DynTrt Catch2::Catch2WithMain )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
