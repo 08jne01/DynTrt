@@ -249,14 +249,51 @@ namespace DynTrt
         }
     };
 
-    // You can inherit from this instead of using the below declaration however
-    // it will limit your definitions to only the global namespace so it's not advised.
+    // New Method of doing Traits
+    template<typename... Ts>
     struct Traits
     {
-        // Default template to specialise with the respective Methods and Types.
-        template<typename Method, typename T, typename... Ts>
-        static inline Method::return_type Invoke( T*, Ts... );
+        template<typename Method, typename T>
+        using method_pointer = DynTrt::detail::Signature<Method>::template any_pointer<T>;
+
+        template<typename T>
+        using vtable = std::tuple<method_pointer<Ts,T>...>;
+
+        template<auto... methods, typename T>
+        void make_trait(T* ptr)
+        {
+            static vtable<T> vtable_pointer = std::make_tuple(
+                methods...
+            );
+
+            pointer = ptr;
+            table = reinterpret_cast<vtable<void>*>(&vtable_pointer);
+        }
+
+        template<size_t function, typename... TyArgs>
+        auto call( TyArgs... args )
+        {
+            return std::get<function>( *table )( pointer, args... );
+        }
+
+        template<size_t function, typename... TyArgs>
+        auto call( TyArgs... args ) const
+        {
+            return std::get<function>( *table )( pointer, args... );
+        }
+
+        vtable<void>* table;
+        void* pointer; 
     };
+
+    // // You can inherit from this instead of using the below declaration however
+    // // it will limit your definitions to only the global namespace so it's not advised.
+    // struct Traits
+    // {
+    //     // Default template to specialise with the respective Methods and Types.
+    //     template<typename Method, typename T, typename... Ts>
+    //     static inline Method::return_type Invoke( T*, Ts... );
+    // };
 }
 
 //static void Shape::Invoke<Shape::Draw,AnyStorage<16>>(AnyStorage<16>)

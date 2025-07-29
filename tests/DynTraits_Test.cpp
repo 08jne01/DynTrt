@@ -113,8 +113,6 @@ void Shape::Invoke<Shape::Scale>( Rectangle* self, double scale )
     self->height *= scale;
 }
 
-
-
 TEST_CASE("DynTrait Basic", "[Basic]")
 {
     SECTION("Circle")
@@ -167,6 +165,164 @@ TEST_CASE("DynTrait Basic", "[Basic]")
             REQUIRE( r.y == 0.25 );
 
             moveable.Call<Shape::Scale>(0.5);
+            REQUIRE(r.width == 0.5);
+            REQUIRE(r.height == 0.5);
+        }
+
+        SECTION("Transformable") 
+        { // assing a Transformable with a Circle will result in linker error
+          // as the function is not defined anywhere.
+            //Shape::Transformable moveable = &c;
+        }
+
+    }
+}
+
+struct Operations
+{
+    template<typename T> static Colour Draw(T* self) { return self->colour; }
+    template<typename T> static void SetColour(T* self, Colour colour) { self->colour = colour; }
+    template<typename T> static void Move(T* self, double x, double y) 
+    {
+        self->x = x;
+        self->y = y;
+    }
+    template<typename T> static void Scale(T* self, double scale);
+    template<typename T> static void Rotate(T* self, double rotation);   
+};
+
+
+struct Drawable : DynTrt::Traits<
+    decltype(Operations::Draw<void>),
+    decltype(Operations::SetColour<void>)
+>
+{
+    template<typename T>
+    Drawable(T* self)
+    { 
+        make_trait< // Constructs vtable
+            Operations::Draw<T>,
+            Operations::SetColour<T>
+        >(self); 
+    }
+    Colour Draw() const             { return call<0>(); }
+    void SetColour(Colour color)    { call<1>(color);   }
+};
+
+struct Transformable : DynTrt::Traits<
+    decltype(Operations::Move<void>),
+    decltype(Operations::Rotate<void>),
+    decltype(Operations::Scale<void>)
+>
+{
+    template<typename T>
+    Transformable(T* self)
+    {
+        make_trait< // Constructs vtable
+            Operations::Move<T>,
+            Operations::Rotate<T>,
+            Operations::Scale<T>
+        >(self);
+    }
+
+    void Move(double x, double y)   { call<0>(x, y);        }
+    void Rotate(double rotation)    { call<1>(rotation);    }
+    void Scale(double scale)        { call<2>(scale);       }
+};
+
+struct Moveable : DynTrt::Traits<
+    decltype(Operations::Move<void>),
+    decltype(Operations::Scale<void>)
+>
+{
+    template<typename T>
+    Moveable(T* self)
+    {
+        make_trait< // Constructs vtable
+            Operations::Move<T>,
+            Operations::Scale<T>
+        >(self);
+    }
+
+    void Move(double x, double y)   { call<0>(x, y);        }
+    void Scale(double scale)        { call<1>(scale);       }
+};
+
+// Implementation of Operations
+template<> void Operations::Rotate(Rectangle* self, double rotation)
+{
+    self->rotation = rotation;
+}
+
+template<> void Operations::Scale(Circle* self, double scale)
+{
+    self->r *= scale;
+}
+
+template<> void Operations::Move(Circle* self , double x, double y)
+{
+    self->x = x;
+    self->y = y;
+}
+
+template<> void Operations::Scale(Rectangle* self, double scale)
+{
+    self->width *= scale;
+    self->height *= scale;
+}
+
+TEST_CASE("DynTrait Alternate", "[Alternate]")
+{
+    SECTION("Circle")
+    {
+        Circle c;
+
+        SECTION("Drawable")
+        {
+            Drawable drawable = &c;
+            drawable.SetColour(Colour::green);
+            REQUIRE(c.colour == Colour::green);
+            REQUIRE( drawable.Draw() == Colour::green );
+        }
+
+        SECTION("Moveable")
+        {
+            Moveable moveable = &c;
+            moveable.Move( 0.5, 0.25 );
+            REQUIRE( c.x == 0.5 );
+            REQUIRE( c.y == 0.25 );
+
+            moveable.Scale(0.5);
+            REQUIRE(c.r == 0.5);
+        }
+
+        SECTION("Transformable") 
+        { // assing a Transformable with a Circle will result in linker error
+          // as the function is not defined anywhere.
+            //Shape::Transformable moveable = &c;
+        }
+    }
+
+    SECTION("Rectangle")
+    {
+        Rectangle r;
+
+        SECTION("Drawable")
+        {
+            Drawable drawable = &r;
+            drawable.SetColour(Colour::green);
+            REQUIRE(r.colour == Colour::green);
+            REQUIRE( drawable.Draw() == Colour::green );
+        }
+
+        SECTION("Moveable")
+        {
+            Moveable moveable = &r;
+            moveable.Move( 0.5, 0.25 );
+            REQUIRE( r.x == 0.5 );
+            REQUIRE( r.y == 0.25 );
+
+            moveable.Scale(0.5);
             REQUIRE(r.width == 0.5);
             REQUIRE(r.height == 0.5);
         }
